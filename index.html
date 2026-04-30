@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Bill Summarizer</title>
+    <style>
+        :root { font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; background: #f4f4f9; color: #333; }
+        body { max-width: 1000px; margin: 0 auto; padding: 2rem; }
+        .card { background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 2rem; }
+        .input-group { margin-bottom: 1rem; }
+        label { display: block; font-weight: bold; margin-bottom: 0.5rem; }
+        input[type="text"], input[type="password"] { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background: #0056b3; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 4px; cursor: pointer; font-size: 1rem; }
+        button:hover { background: #004494; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; background: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        th, td { padding: 1rem; border: 1px solid #ddd; text-align: left; vertical-align: top; }
+        th { background: #f8f9fa; font-weight: bold; }
+        .status { color: #666; font-style: italic; margin-bottom: 1rem; }
+        .loading { color: #0056b3; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>Legislative Impact Summarizer</h1>
+    
+    <div class="card">
+        <div class="input-group">
+            <label for="legiscanKey">LegiScan API Key:</label>
+            <input type="password" id="legiscanKey" placeholder="Paste your free LegiScan API key here">
+        </div>
+        <div class="input-group">
+            <label for="geminiKey">Google Gemini API Key (Free Tier):</label>
+            <input type="password" id="geminiKey" placeholder="Paste your Google AI Studio API key here">
+        </div>
+        <div class="input-group">
+            <label for="searchQuery">Search Query (e.g., "AI regulation", "healthcare"):</label>
+            <input type="text" id="searchQuery" value="artificial intelligence">
+        </div>
+        <button id="searchBtn" onclick="runPipeline()">Fetch and Summarize Recent Bills</button>
+        <div id="statusMsg" class="status"></div>
+    </div>
+
+    <table id="resultsTable" style="display: none;">
+        <thead>
+            <tr>
+                <th style="width: 15%;">State / Bill Number</th>
+                <th style="width: 25%;">Official Title</th>
+                <th style="width: 60%;">AI Impact Summary (1-10 Sentences)</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody">
+            <!-- Results will be injected here -->
+        </tbody>
+    </table>
+
+    <script>
+        // Note: LegiScan's API does not natively support CORS (client-side fetching). 
+        // We use a free CORS proxy to allow GitHub Pages to communicate with it.
+        const CORS_PROXY = "https://corsproxy.io/?";
+
+        async function runPipeline() {
+            const legiscanKey = document.getElementById('legiscanKey').value.trim();
+            const geminiKey = document.getElementById('geminiKey').value.trim();
+            const query = document.getElementById('searchQuery').value.trim();
+            const statusMsg = document.getElementById('statusMsg');
+            const tableBody = document.getElementById('tableBody');
+            const resultsTable = document.getElementById('resultsTable');
+            const searchBtn = document.getElementById('searchBtn');
+
+            if (!legiscanKey || !geminiKey || !query) {
+                alert("Please fill in all API keys and the search query.");
+                return;
+            }
+
+            searchBtn.disabled = true;
+            tableBody.innerHTML = "";
+            resultsTable.style.display = "table";
+            statusMsg.innerHTML = "<span class='loading'>Step 1/3: Searching LegiScan for recent bills...</span>";
+
+            try {
+                // 1. Search LegiScan
+                const searchUrl = `${CORS_PROXY}${encodeURIComponent(`https://api.legiscan.com/?key=${legiscanKey}&op=getSearch&state=ALL&year=2026&query=${query}`)}`;
+                const searchRes = await fetch(searchUrl);
+                const searchData = await searchRes.json();
+
+                if (searchData.status !== "OK") throw new Error(searchData.alert?.message || "LegiScan API Error");
+                
+                // Extract top 5 bills to avoid hitting rate limits instantly
+                const bills = [];
+                for (let key in searchData.searchresult) {
+                    if (key !== "summary" && bills.length < 5) {
+                        bills.push(searchData.searchresult[key]);
+                    }
+                }
+
+                if (bills.length === 0) {
+                    statusMsg.innerText = "No bills found for this query.";
+                    searchBtn.disabled = false;
+                    return;
+                }
+
+                // 2. Process Each Bill
+                statusMsg.innerHTML = `<span class='loading'>Step 2/3: Fetching full text and summarizing ${bills.length} bills...</span>`;
+                
+                for (let bill of bills) {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td><strong>${bill.state} ${bill.bill_number}</strong><br><small>Last Action: ${bill.last_action_date}</small></td>
+                        <td>${bill.title}</td>
+                        <td id="summary-${bill.bill_id}"><em>Fetching text & summarizing...</em></td>
+                    `;
+                    tableBody.appendChild(tr);
+
+                    // Fetch bill text
+                    let billText = await getBillText(legiscanKey, bill.bill_id);
+                    
+                    if (!billText) {
+                        document.getElementById(`summary-${bill.bill_id}`).innerText = "Could not retrieve plain text for this bill (may be PDF only).";
+                        continue;
+                    }
+
+                    // Summarize with Gemini
+                    let summary = await summarizeWithGemini(geminiKey, billText, bill.title);
+                    document.getElementById(`summary-${bill.bill_id}`).innerText = summary;
+                }
+
+                statusMsg.innerText = "Processing complete.";
+            } catch (error) {
+                console.error(error);
+                statusMsg.innerText = `Error: ${error.message}`;
+            } finally {
+                searchBtn.disabled = false;
+            }
+        }
+
+        async function getBillText(apiKey, billId) {
+            try {
+                const textUrl = `${CORS_PROXY}${encodeURIComponent(`https://api.legiscan.com/?key=${apiKey}&op=getBillText&id=${billId}`)}`;
+                const res = await fetch(textUrl);
+                const data = await res.json();
+                
+                if (data.status === "OK" && data.text.doc) {
+                    // LegiScan returns base64 encoded text
+                    const decodedText = atob(data.text.doc);
+                    // Strip HTML tags roughly to save tokens and clean up
+                    const plainText = decodedText.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
+                    return plainText;
+                }
+                return null;
+            } catch (err) {
+                console.error("Failed to fetch bill text:", err);
+                return null;
+            }
+        }
+
+        async function summarizeWithGemini(apiKey, billText, title) {
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            
+            // System prompt tailored to your requirements
+            const prompt = `
+            You are a legal analyst. Read the following legislative bill text and summarize its real-world impact in exactly 1 to 10 sentences. 
+            Do not list the state or bill number, just focus directly on what the bill changes, bans, funds, or enacts.
+            
+            Bill Title: ${title}
+            
+            Bill Text:
+            ${billText.substring(0, 100000)} // Safety crop just in case it exceeds massive limits
+            `;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }]
+                    })
+                });
+
+                const data = await response.json();
+                if (data.error) throw new Error(data.error.message);
+                
+                return data.candidates[0].content.parts[0].text;
+            } catch (err) {
+                console.error("Gemini API Error:", err);
+                return "AI Summarization failed: " + err.message;
+            }
+        }
+    </script>
+</body>
+</html>
