@@ -10,7 +10,7 @@
         body { max-width: 1200px; margin: 0 auto; padding: 2rem; }
         .card { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 2rem; }
         .input-row { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
-        .input-group { flex: 1; min-width: 250px; }
+        .input-group { flex: 1; min-width: 200px; }
         label { display: block; font-size: 0.85rem; font-weight: 600; color: #555; margin-bottom: 4px; }
         input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
         button { background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.2s; }
@@ -39,8 +39,12 @@
                 <input type="password" id="geminiKey">
             </div>
             <div class="input-group">
-                <label>Keywords (e.g. "privacy")</label>
+                <label>Keywords</label>
                 <input type="text" id="searchQuery" value="artificial intelligence">
+            </div>
+            <div class="input-group" style="flex: 0 0 100px;">
+                <label>Limit (n)</label>
+                <input type="number" id="resultLimit" value="5" min="1" max="50">
             </div>
         </div>
         <button id="searchBtn" onclick="runPipeline()">Scan & Summarize Recent Bills</button>
@@ -51,7 +55,7 @@
         <thead>
             <tr>
                 <th>Bill / Link</th>
-                <th>Title</th> <!-- NEW COLUMN -->
+                <th>Title</th>
                 <th>Status</th>
                 <th>Last Action</th>
                 <th>AI Impact Summary</th>
@@ -65,20 +69,14 @@
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         const CORS_PROXY = "https://corsproxy.io/?";
 
-        // Map LegiScan numeric status to text
-        const STATUS_MAP = {
-            1: "Introduced",
-            2: "Engrossed",
-            3: "Enrolled",
-            4: "Passed",
-            5: "Vetoed",
-            6: "Failed"
-        };
+        // Helper for rate limiting
+        const sleep = ms => new Promise(res => setTimeout(res, ms));
 
         async function runPipeline() {
             const legiscanKey = document.getElementById('legiscanKey').value;
             const geminiKey = document.getElementById('geminiKey').value;
             const query = document.getElementById('searchQuery').value;
+            const limit = parseInt(document.getElementById('resultLimit').value) || 5;
             const tableBody = document.getElementById('tableBody');
             const statusMsg = document.getElementById('statusMsg');
             
@@ -90,47 +88,47 @@
                 const searchRes = await fetch(`${CORS_PROXY}${encodeURIComponent(`https://api.legiscan.com/?key=${legiscanKey}&op=getSearch&query=${query}`)}`);
                 const searchData = await searchRes.json();
                 
-                // LegiScan stores results in searchData.searchresult. Use Object.values to get the list
                 const rawResults = Object.values(searchData.searchresult);
-                const bills = rawResults.filter(b => b && b.bill_id).slice(0, 5);
+                // Apply the dynamic slice limit
+                const bills = rawResults.filter(b => b && b.bill_id).slice(0, limit);
         
                 if (bills.length === 0) {
                     statusMsg.innerText = "No bills found. Try a different query.";
                     return;
                 }
         
-                for (let bill of bills) {
-                
-        
-                    const statusText = bill.last_action; // Default to pending if unknown
+                for (let i = 0; i < bills.length; i++) {
+                    let bill = bills[i];
+                    statusMsg.innerText = `Processing bill ${i + 1} of ${bills.length}...`;
+
+                    const statusText = bill.last_action || "Pending";
                     const statusClass = bill.status === 4 ? "status-passed" : "status-other";
                     
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
-                        <td>
-                            <a class="bill-link" href="${bill.url}" target="_blank">${bill.state} ${bill.bill_number}</a>
-                        </td>
-                        <td style="font-size: 0.85rem; max-width: 200px;">${bill.title}</td> <!-- TITLE COLUMN -->
+                        <td><a class="bill-link" href="${bill.url}" target="_blank">${bill.state} ${bill.bill_number}</a></td>
+                        <td style="font-size: 0.85rem; max-width: 200px;">${bill.title}</td>
                         <td><span class="status-badge ${statusClass}">${statusText}</span></td>
                         <td style="white-space: nowrap;">${bill.last_action_date}</td>
                         <td id="summary-${bill.bill_id}"><em>Extracting text...</em></td>
                     `;
                     tableBody.appendChild(tr);
         
-                    // Fetch and Summarize
                     let text = await getBillText(legiscanKey, bill.bill_id);
                     if (!text) {
-                        document.getElementById(`summary-${bill.bill_id}`).innerText = "Text content not found in API response.";
+                        document.getElementById(`summary-${bill.bill_id}`).innerText = "Text not found.";
                         continue;
                     }
-        
+
+                    // Rate limiting: wait 1 second between AI calls to avoid 429 errors on free tier
+                    if (i > 0) await sleep(1000);
+
                     let summary = await summarizeWithGemini(geminiKey, text, bill.title, statusText);
                     document.getElementById(`summary-${bill.bill_id}`).innerText = summary;
                 }
                 statusMsg.innerText = "Done.";
             } catch (e) {
                 statusMsg.innerText = "Error: " + e.message;
-                console.error(e);
             }
         }
 
@@ -157,7 +155,7 @@
             for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
             const pdf = await pdfjsLib.getDocument({data: bytes}).promise;
             let fullText = "";
-            for (let i = 1; i <= Math.min(pdf.numPages, 10); i++) { // Limit to 10 pages for speed
+            for (let i = 1; i <= Math.min(pdf.numPages, 10); i++) {
                 const page = await pdf.getPage(i);
                 const content = await page.getTextContent();
                 fullText += content.items.map(item => item.str).join(" ") + "\n";
@@ -166,18 +164,46 @@
         }
 
         async function summarizeWithGemini(apiKey, text, title, currentStatus) {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-            const prompt = `Bill Title: ${title}\nCurrent Status: ${currentStatus}\n\nTask: Summarize the real-world impact of this bill in 1-10 sentences. Note explicitly if the bill has already passed or is still being debated. Text: ${text.substring(0, 40000)}`;
+            // UPDATED to Gemini 3 Flash for 2026 performance
+            const url = `https://generativelanguage.googleapis.com/v1/models/gemini-3-flash:generateContent?key=${apiKey}`;
+            
+            // We can now use a larger substring because Gemini 3 handles massive context better
+            const prompt = `Bill Title: ${title}\nCurrent Status: ${currentStatus}\n\nTask: Summarize the real-world impact of this bill in 1-10 sentences. Note explicitly if the bill has already passed or is still being debated. Use a neutral, analytical tone.\n\nText: ${text.substring(0, 60000)}`;
             
             try {
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                    body: JSON.stringify({ 
+                        contents: [{ parts: [{ text: prompt }] }],
+                        safetySettings: [
+                            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                        ],
+                        generationConfig: {
+                            temperature: 0.1, // Lower temperature for more factual summaries
+                            maxOutputTokens: 800
+                        }
+                    })
                 });
+        
                 const data = await res.json();
-                return data.candidates[0].content.parts[0].text;
-            } catch (e) { return "AI failed to summarize."; }
+                
+                if (data.error) {
+                    console.error("Gemini 3 Error:", data.error.message);
+                    return `AI Error: ${data.error.message}`;
+                }
+        
+                if (data.candidates && data.candidates[0].content) {
+                    return data.candidates[0].content.parts[0].text;
+                }
+                
+                return "AI failed to generate a summary (possibly safety filtered).";
+            } catch (e) { 
+                return "Network error. Please check your API key and internet connection."; 
+            }
         }
     </script>
 </body>
