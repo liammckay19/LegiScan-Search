@@ -167,7 +167,7 @@
             // UPDATED: Changed 'v1' to 'v1beta' and model to 'gemini-3-flash-preview'
             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
             
-            const prompt = `Bill Title: ${title}\nCurrent Status: ${currentStatus}\n\nTask: Summarize the real-world impact of this bill in 1-10 sentences. Note explicitly if the bill has already passed or is still being debated. Use a neutral, analytical tone.\n\nText: ${text.substring(0, 60000)}`;
+            const prompt = `Bill Title: ${title}\nCurrent Status: ${currentStatus}\n\nTask: Summarize the real-world impact of this bill in 1-10 sentences. Note explicitly if the bill has already passed or is still being debated. Use a neutral, analytical tone.\n\nText: ${text.substring(0, 500000)}`;
             
             try {
                 const res = await fetch(url, {
@@ -183,9 +183,12 @@
                         ],
                         generationConfig: {
                             temperature: 0.1,
-                            maxOutputTokens: 800,
-                            // Optional: Gemini 3 models allow setting thinking levels
-                            // thinkingLevel: 'minimal' 
+                            // INCREASE THIS VALUE
+                            // 2048 tokens is more than enough for 1-10 sentences
+                            maxOutputTokens: 2048, 
+                            // Optional: ensure the model doesn't get lazy
+                            topP: 0.95,
+                            topK: 40
                         }
                     })
                 });
