@@ -137,16 +137,34 @@
 
         async function getBillText(apiKey, billId) {
             try {
+                // Use the LegiScan getBillText operation
                 const textUrl = `${CORS_PROXY}${encodeURIComponent(`https://api.legiscan.com/?key=${apiKey}&op=getBillText&id=${billId}`)}`;
                 const res = await fetch(textUrl);
                 const data = await res.json();
                 
-                if (data.status === "OK" && data.text.doc) {
-                    // LegiScan returns base64 encoded text
-                    const decodedText = atob(data.text.doc);
-                    // Strip HTML tags roughly to save tokens and clean up
-                    const plainText = decodedText.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
-                    return plainText;
+                if (data.status === "OK" && data.text) {
+                    const docData = data.text.doc;
+                    const mimeType = data.text.mime;
+        
+                    // Check if the format is HTML or Plain Text (Commonly 'text/html')
+                    if (mimeType === "text/html" || mimeType === "text/plain") {
+                        // Decode Base64 to string
+                        const decodedText = atob(docData);
+                        
+                        // Remove HTML tags and extra whitespace to clean it for the AI
+                        const cleanText = decodedText
+                            .replace(/<style[^>]*>.*<\/style>/gms, '') // Remove CSS
+                            .replace(/<[^>]*>?/gm, ' ')              // Remove HTML tags
+                            .replace(/&nbsp;/g, ' ')                 // Remove HTML entities
+                            .replace(/\s+/g, ' ')                    // Collapse whitespace
+                            .trim();
+                        
+                        return cleanText;
+                    } else if (mimeType === "application/pdf") {
+                        // If it's a PDF, we tell the user we can't process it client-side
+                        console.warn(`Bill ${billId} is only available as a PDF.`);
+                        return null;
+                    }
                 }
                 return null;
             } catch (err) {
