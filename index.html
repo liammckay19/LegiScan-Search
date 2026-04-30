@@ -8,63 +8,138 @@
     <style>
         :root { font-family: system-ui, -apple-system, sans-serif; background: #f0f2f5; }
         body { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+        
+        /* Navigation & Utility */
+        .top-nav { display: flex; justify-content: flex-end; margin-bottom: 1rem; }
+        .nav-link { color: #007bff; text-decoration: none; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
+        .nav-link:hover { text-decoration: underline; }
+        .hidden { display: none !important; }
+
         .card { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 2rem; }
         .input-row { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
         .input-group { flex: 1; min-width: 200px; }
         label { display: block; font-size: 0.85rem; font-weight: 600; color: #555; margin-bottom: 4px; }
         input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        
         button { background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.2s; }
         button:hover { background: #0056b3; }
+        .secondary-btn { background: #6c757d; margin-top: 1rem; }
+
         table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
         th, td { padding: 14px; text-align: left; border-bottom: 1px solid #eee; font-size: 0.95rem; }
         th { background: #f8f9fa; color: #333; font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; }
+        
         .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
         .status-passed { background: #d4edda; color: #155724; }
         .status-other { background: #fff3cd; color: #856404; }
         .bill-link { color: #007bff; text-decoration: none; font-weight: 600; }
-        .bill-link:hover { text-decoration: underline; }
+        
+        /* Guide Styles */
+        .guide-section { line-height: 1.6; }
+        .guide-section h3 { color: #333; border-bottom: 2px solid #eee; padding-bottom: 5px; }
+        ol { padding-left: 20px; }
+        li { margin-bottom: 10px; }
+        code { background: #f1f1f1; padding: 2px 5px; border-radius: 4px; font-family: monospace; }
     </style>
 </head>
 <body>
 
-    <div class="card">
-        <h2>Legislative Tracker</h2>
-        <div class="input-row">
-            <div class="input-group">
-                <label>LegiScan API Key</label>
-                <input type="password" id="legiscanKey">
-            </div>
-            <div class="input-group">
-                <label>Gemini AI Key</label>
-                <input type="password" id="geminiKey">
-            </div>
-            <div class="input-group">
-                <label>Keywords</label>
-                <input type="text" id="searchQuery" value="artificial intelligence">
-            </div>
-            <div class="input-group" style="flex: 0 0 100px;">
-                <label>Limit (n)</label>
-                <input type="number" id="resultLimit" value="5" min="1" max="50">
-            </div>
-        </div>
-        <button id="searchBtn" onclick="runPipeline()">Scan & Summarize Recent Bills</button>
-        <div id="statusMsg" style="margin-top: 10px; color: #666;"></div>
+    <!-- Top Link -->
+    <div class="top-nav" id="navContainer">
+        <a class="nav-link" onclick="showPage('guidePage')">What is the API keys?</a>
     </div>
 
-    <table id="resultsTable" style="display: none;">
-        <thead>
-            <tr>
-                <th>Bill / Link</th>
-                <th>Title</th>
-                <th>Status</th>
-                <th>Last Action</th>
-                <th>AI Impact Summary</th>
-            </tr>
-        </thead>
-        <tbody id="tableBody"></tbody>
-    </table>
+    <!-- MAIN TRACKER PAGE -->
+    <div id="mainPage">
+        <div class="card">
+            <h2>Legislative Tracker</h2>
+            <div class="input-row">
+                <div class="input-group">
+                    <label>LegiScan API Key</label>
+                    <input type="password" id="legiscanKey" placeholder="Enter LegiScan Key">
+                </div>
+                <div class="input-group">
+                    <label>Gemini AI Key</label>
+                    <input type="password" id="geminiKey" placeholder="Enter Google AI Key">
+                </div>
+                <div class="input-group">
+                    <label>Gemini Model</label>
+                    <select id="modelSelect" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+                        <option value="gemini-3-flash-preview">Loading models...</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>Keywords</label>
+                    <input type="text" id="searchQuery" value="artificial intelligence">
+                </div>
+                <div class="input-group" style="flex: 0 0 100px;">
+                    <label>Limit (n)</label>
+                    <input type="number" id="resultLimit" value="5" min="1" max="50">
+                </div>
+            </div>
+            <button id="searchBtn" onclick="runPipeline()">Scan & Summarize Recent Bills</button>
+            <div id="statusMsg" style="margin-top: 10px; color: #666;"></div>
+        </div>
+
+        <table id="resultsTable" style="display: none;">
+            <thead>
+                <tr>
+                    <th>Bill / Link</th>
+                    <th>Title</th>
+                    <th>Status</th>
+                    <th>Last Action</th>
+                    <th>AI Impact Summary</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+
+    <!-- GUIDE PAGE (Hidden by default) -->
+    <div id="guidePage" class="hidden">
+        <div class="card guide-section">
+            <button class="secondary-btn" style="width: auto; padding: 8px 15px;" onclick="showPage('mainPage')">← Back to Tracker</button>
+            
+            <h2 style="margin-top: 1.5rem;">How to get your API Keys</h2>
+            <p>To use this monitor, you need two free keys. These keys act like passwords that allow this site to talk to legislative databases and AI models on your behalf.</p>
+
+            <h3>1. LegiScan API Key</h3>
+            <p>LegiScan provides the raw legislative data (bill text, dates, and status).</p>
+            <ol>
+                <li>Go to <a href="https://legiscan.com/legiscan" target="_blank">LegiScan.com</a> and register for a <strong>Free Personal Account</strong>.</li>
+                <li>Once logged in, go to the <strong>API Summary</strong> or <strong>Settings</strong> page.</li>
+                <li>Copy your <strong>API Key</strong> string.</li>
+            </ol>
+
+            <h3>2. Google AI Studio (Gemini) Key</h3>
+            <p>This key powers the Gemini 3 Flash model that summarizes the bills.</p>
+            <ol>
+                <li>Visit <a href="https://aistudio.google.com/" target="_blank">Google AI Studio</a>.</li>
+                <li>Sign in with your Google account.</li>
+                <li>Click on <strong>"Get API key"</strong> in the sidebar.</li>
+                <li>Click <strong>"Create API key in new project"</strong>.</li>
+                <li>Copy the key. <em>Note: In 2026, ensure you are using a key that supports <code>v1beta</code> models for Gemini 3.</em></li>
+            </ol>
+
+            <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 5px solid #ffeeba; margin-top: 2rem;">
+                <strong>Security Note:</strong> These keys are stored only in your browser's memory while the page is open. They are not saved to any server. If you refresh the page, you will need to paste them again.
+            </div>
+        </div>
+    </div>
 
     <script>
+        // NAVIGATION LOGIC
+        function showPage(pageId) {
+            document.getElementById('mainPage').classList.add('hidden');
+            document.getElementById('guidePage').classList.add('hidden');
+            document.getElementById('navContainer').classList.add('hidden');
+            
+            document.getElementById(pageId).classList.remove('hidden');
+            if (pageId === 'mainPage') {
+                document.getElementById('navContainer').classList.remove('hidden');
+            }
+        }
+        
         const pdfjsLib = window['pdfjs-dist/build/pdf'];
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         const CORS_PROXY = "https://corsproxy.io/?";
@@ -163,10 +238,51 @@
             return fullText;
         }
 
-        async function summarizeWithGemini(apiKey, text, title, currentStatus) {
-            // UPDATED: Changed 'v1' to 'v1beta' and model to 'gemini-3-flash-preview'
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+        // 1. Add an event listener to the API key input to fetch models when the user finishes typing
+        document.getElementById('geminiKey').addEventListener('blur', fetchAvailableModels);
+        
+        async function fetchAvailableModels() {
+            const apiKey = document.getElementById('geminiKey').value;
+            const modelSelect = document.getElementById('modelSelect');
             
+            if (!apiKey) return;
+        
+            try {
+                modelSelect.innerHTML = '<option>Fetching models...</option>';
+                const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+                const res = await fetch(url);
+                const data = await res.json();
+        
+                if (data.models) {
+                    // Filter for models that support "generateContent" (ignores embedding/speech-only models)
+                    const chatModels = data.models.filter(m => 
+                        m.supportedGenerationMethods.includes('generateContent')
+                    );
+        
+                    modelSelect.innerHTML = ''; // Clear loading
+                    chatModels.forEach(m => {
+                        const opt = document.createElement('option');
+                        opt.value = m.name; // This is usually "models/gemini-3-flash"
+                        opt.textContent = m.displayName;
+                        
+                        // Set Gemini 3 Flash as default if it exists
+                        if (m.name.includes('gemini-3-flash')) opt.selected = true;
+                        
+                        modelSelect.appendChild(opt);
+                    });
+                }
+            } catch (e) {
+                modelSelect.innerHTML = '<option value="gemini-3-flash-preview">Error fetching (using default)</option>';
+            }
+        }
+        
+
+        
+        async function summarizeWithGemini(apiKey, text, title, currentStatus) {
+            const selectedModel = document.getElementById('modelSelect').value; 
+            // The endpoint changes slightly because the model name from the API already includes "models/"
+            const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${apiKey}`;
+                            
             const prompt = `Bill Title: ${title}\nCurrent Status: ${currentStatus}\n\nTask: Summarize the real-world impact of this bill in 1-10 sentences. Note explicitly if the bill has already passed or is still being debated. Use a neutral, analytical tone.\n\nText: ${text.substring(0, 500000)}`;
             
             try {
@@ -196,8 +312,8 @@
                 const data = await res.json();
                 
                 if (data.error) {
-                    console.error("Gemini 3 API Error:", data.error);
-                    return `AI Error: ${data.error.message} (Try checking if your API key has v1beta access enabled)`;
+                    console.error("Gemini API Error:", data.error);
+                    return `AI Error: ${data.error.message} Error with selected model. Ensure your key has access to it.`;
                 }
         
                 if (data.candidates && data.candidates[0].content) {
