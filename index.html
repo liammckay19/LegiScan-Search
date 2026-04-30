@@ -3,50 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Bill Summarizer (PDF Enabled)</title>
-    <!-- Load PDF.js from CDN -->
+    <title>LegiScan AI Monitor</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
-        :root { font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; background: #f4f4f9; color: #333; }
-        body { max-width: 1000px; margin: 0 auto; padding: 2rem; }
-        .card { background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 2rem; }
-        .input-group { margin-bottom: 1rem; }
-        label { display: block; font-weight: bold; margin-bottom: 0.5rem; }
-        input { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        button { background: #0056b3; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 4px; cursor: pointer; font-size: 1rem; width: 100%; }
-        button:hover { background: #004494; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
-        table { width: 100%; border-collapse: collapse; margin-top: 1rem; background: white; }
-        th, td { padding: 1rem; border: 1px solid #ddd; text-align: left; vertical-align: top; }
-        th { background: #f8f9fa; }
-        .status { color: #666; font-style: italic; margin-top: 10px; }
+        :root { font-family: system-ui, -apple-system, sans-serif; background: #f0f2f5; }
+        body { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+        .card { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 2rem; }
+        .input-row { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+        .input-group { flex: 1; min-width: 250px; }
+        label { display: block; font-size: 0.85rem; font-weight: 600; color: #555; margin-bottom: 4px; }
+        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.2s; }
+        button:hover { background: #0056b3; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        th, td { padding: 14px; text-align: left; border-bottom: 1px solid #eee; font-size: 0.95rem; }
+        th { background: #f8f9fa; color: #333; font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; }
+        .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
+        .status-passed { background: #d4edda; color: #155724; }
+        .status-other { background: #fff3cd; color: #856404; }
+        .bill-link { color: #007bff; text-decoration: none; font-weight: 600; }
+        .bill-link:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
 
-    <h1>Legislative Impact Summarizer</h1>
-    
     <div class="card">
-        <div class="input-group">
-            <label>LegiScan API Key:</label>
-            <input type="password" id="legiscanKey">
+        <h2>Legislative Tracker</h2>
+        <div class="input-row">
+            <div class="input-group">
+                <label>LegiScan API Key</label>
+                <input type="password" id="legiscanKey">
+            </div>
+            <div class="input-group">
+                <label>Gemini AI Key</label>
+                <input type="password" id="geminiKey">
+            </div>
+            <div class="input-group">
+                <label>Keywords (e.g. "privacy")</label>
+                <input type="text" id="searchQuery" value="artificial intelligence">
+            </div>
         </div>
-        <div class="input-group">
-            <label>Gemini AI Key:</label>
-            <input type="password" id="geminiKey">
-        </div>
-        <div class="input-group">
-            <label>Search Query:</label>
-            <input type="text" id="searchQuery" value="artificial intelligence">
-        </div>
-        <button id="searchBtn" onclick="runPipeline()">Fetch & Summarize</button>
-        <div id="statusMsg" class="status"></div>
+        <button id="searchBtn" onclick="runPipeline()">Scan & Summarize Recent Bills</button>
+        <div id="statusMsg" style="margin-top: 10px; color: #666;"></div>
     </div>
 
     <table id="resultsTable" style="display: none;">
         <thead>
             <tr>
-                <th>Bill</th>
+                <th>Bill / Link</th>
+                <th>Status</th>
+                <th>Last Action</th>
                 <th>AI Impact Summary</th>
             </tr>
         </thead>
@@ -54,101 +60,114 @@
     </table>
 
     <script>
-        // Configure PDF.js Worker
         const pdfjsLib = window['pdfjs-dist/build/pdf'];
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
         const CORS_PROXY = "https://corsproxy.io/?";
+
+        // Map LegiScan numeric status to text
+        const STATUS_MAP = {
+            1: "Introduced",
+            2: "Engrossed",
+            3: "Enrolled",
+            4: "Passed",
+            5: "Vetoed",
+            6: "Failed"
+        };
 
         async function runPipeline() {
             const legiscanKey = document.getElementById('legiscanKey').value;
             const geminiKey = document.getElementById('geminiKey').value;
             const query = document.getElementById('searchQuery').value;
             const tableBody = document.getElementById('tableBody');
+            const statusMsg = document.getElementById('statusMsg');
             
             tableBody.innerHTML = "";
             document.getElementById('resultsTable').style.display = "table";
+            statusMsg.innerText = "Searching LegiScan...";
 
             try {
-                // 1. Search LegiScan
-                const searchRes = await fetch(`${CORS_PROXY}${encodeURIComponent(`https://api.legiscan.com/?key=${legiscanKey}&op=getSearch&year=2026&query=${query}`)}`);
+                // Fetch search results
+                const searchRes = await fetch(`${CORS_PROXY}${encodeURIComponent(`https://api.legiscan.com/?key=${legiscanKey}&op=getSearch&query=${query}`)}`);
                 const searchData = await searchRes.json();
+                
+                // Get top 5 results
                 const bills = Object.values(searchData.searchresult).filter(b => b.bill_id).slice(0, 5);
 
                 for (let bill of bills) {
+                    const statusText = STATUS_MAP[bill.status] || "Unknown";
+                    const statusClass = bill.status === 4 ? "status-passed" : "status-other";
+                    
                     const tr = document.createElement('tr');
-                    tr.innerHTML = `<td><b>${bill.state} ${bill.bill_number}</b></td><td id="summary-${bill.bill_id}">Loading...</td>`;
+                    tr.innerHTML = `
+                        <td>
+                            <a class="bill-link" href="${bill.url}" target="_blank">${bill.state} ${bill.bill_number}</a>
+                        </td>
+                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                        <td>${bill.last_action_date}</td>
+                        <td id="summary-${bill.bill_id}">Analyzing...</td>
+                    `;
                     tableBody.appendChild(tr);
 
-                    // 2. Fetch Text (HTML or PDF)
+                    // Fetch text and summarize
                     let text = await getBillText(legiscanKey, bill.bill_id);
-                    
                     if (!text) {
-                        document.getElementById(`summary-${bill.bill_id}`).innerText = "Error: Could not extract text.";
+                        document.getElementById(`summary-${bill.bill_id}`).innerText = "Text unavailable.";
                         continue;
                     }
 
-                    // 3. Summarize
-                    let summary = await summarizeWithGemini(geminiKey, text, bill.title);
+                    let summary = await summarizeWithGemini(geminiKey, text, bill.title, statusText);
                     document.getElementById(`summary-${bill.bill_id}`).innerText = summary;
                 }
+                statusMsg.innerText = "Complete.";
             } catch (e) {
-                alert("Error: " + e.message);
+                statusMsg.innerText = "Error: " + e.message;
             }
         }
 
         async function getBillText(apiKey, billId) {
-            const url = `${CORS_PROXY}${encodeURIComponent(`https://api.legiscan.com/?key=${apiKey}&op=getBillText&id=${billId}`)}`;
-            const res = await fetch(url);
-            const data = await res.json();
-            
-            if (data.status !== "OK") return null;
+            try {
+                const url = `${CORS_PROXY}${encodeURIComponent(`https://api.legiscan.com/?key=${apiKey}&op=getBillText&id=${billId}`)}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                if (data.status !== "OK") return null;
 
-            const base64 = data.text.doc;
-            const mime = data.text.mime;
-
-            if (mime === "text/html") {
-                const html = atob(base64);
-                return html.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
-            } 
-            
-            if (mime === "application/pdf") {
-                return await extractTextFromPDF(base64);
-            }
-            
-            return null;
+                const base64 = data.text.doc;
+                if (data.text.mime === "text/html") {
+                    return atob(base64).replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
+                } else if (data.text.mime === "application/pdf") {
+                    return await extractTextFromPDF(base64);
+                }
+                return null;
+            } catch (e) { return null; }
         }
 
         async function extractTextFromPDF(base64) {
             const binary = atob(base64);
-            const len = binary.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
-
-            const loadingTask = pdfjsLib.getDocument({data: bytes});
-            const pdf = await loadingTask.promise;
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            const pdf = await pdfjsLib.getDocument({data: bytes}).promise;
             let fullText = "";
-
-            for (let i = 1; i <= pdf.numPages; i++) {
+            for (let i = 1; i <= Math.min(pdf.numPages, 10); i++) { // Limit to 10 pages for speed
                 const page = await pdf.getPage(i);
                 const content = await page.getTextContent();
-                const strings = content.items.map(item => item.str);
-                fullText += strings.join(" ") + "\n";
+                fullText += content.items.map(item => item.str).join(" ") + "\n";
             }
             return fullText;
         }
 
-        async function summarizeWithGemini(apiKey, text, title) {
+        async function summarizeWithGemini(apiKey, text, title, currentStatus) {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-            const prompt = `Summarize the impact of this bill in 1-10 sentences: ${title}\n\nText: ${text.substring(0, 50000)}`;
+            const prompt = `Bill Title: ${title}\nCurrent Status: ${currentStatus}\n\nTask: Summarize the real-world impact of this bill in 1-10 sentences. Note explicitly if the bill has already passed or is still being debated. Text: ${text.substring(0, 40000)}`;
             
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-            });
-            const data = await res.json();
-            return data.candidates[0].content.parts[0].text;
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+                const data = await res.json();
+                return data.candidates[0].content.parts[0].text;
+            } catch (e) { return "AI failed to summarize."; }
         }
     </script>
 </body>
