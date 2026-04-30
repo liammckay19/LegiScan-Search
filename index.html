@@ -85,17 +85,32 @@
             tableBody.innerHTML = "";
             document.getElementById('resultsTable').style.display = "table";
             statusMsg.innerText = "Searching LegiScan...";
-
+        
             try {
-                // Fetch search results
                 const searchRes = await fetch(`${CORS_PROXY}${encodeURIComponent(`https://api.legiscan.com/?key=${legiscanKey}&op=getSearch&query=${query}`)}`);
                 const searchData = await searchRes.json();
                 
-                // Get top 5 results
-                const bills = Object.values(searchData.searchresult).filter(b => b.bill_id).slice(0, 5);
-
+                // LegiScan stores results in searchData.searchresult. Use Object.values to get the list
+                const rawResults = Object.values(searchData.searchresult);
+                const bills = rawResults.filter(b => b && b.bill_id).slice(0, 5);
+        
+                if (bills.length === 0) {
+                    statusMsg.innerText = "No bills found. Try a different query.";
+                    return;
+                }
+        
                 for (let bill of bills) {
-                    const statusText = STATUS_MAP[bill.status] || "Unknown";
+                    // LegiScan Status Mapping
+                    const STATUS_CODES = {
+                        1: "Introduced",
+                        2: "Engrossed",
+                        3: "Enrolled",
+                        4: "Passed",
+                        5: "Vetoed",
+                        6: "Failed"
+                    };
+        
+                    const statusText = STATUS_CODES[bill.status] || "Pending"; // Default to pending if unknown
                     const statusClass = bill.status === 4 ? "status-passed" : "status-other";
                     
                     const tr = document.createElement('tr');
@@ -103,25 +118,27 @@
                         <td>
                             <a class="bill-link" href="${bill.url}" target="_blank">${bill.state} ${bill.bill_number}</a>
                         </td>
+                        <td style="font-size: 0.85rem; max-width: 200px;">${bill.title}</td> <!-- TITLE COLUMN -->
                         <td><span class="status-badge ${statusClass}">${statusText}</span></td>
-                        <td>${bill.last_action_date}</td>
-                        <td id="summary-${bill.bill_id}">Analyzing...</td>
+                        <td style="white-space: nowrap;">${bill.last_action_date}</td>
+                        <td id="summary-${bill.bill_id}"><em>Extracting text...</em></td>
                     `;
                     tableBody.appendChild(tr);
-
-                    // Fetch text and summarize
+        
+                    // Fetch and Summarize
                     let text = await getBillText(legiscanKey, bill.bill_id);
                     if (!text) {
-                        document.getElementById(`summary-${bill.bill_id}`).innerText = "Text unavailable.";
+                        document.getElementById(`summary-${bill.bill_id}`).innerText = "Text content not found in API response.";
                         continue;
                     }
-
+        
                     let summary = await summarizeWithGemini(geminiKey, text, bill.title, statusText);
                     document.getElementById(`summary-${bill.bill_id}`).innerText = summary;
                 }
-                statusMsg.innerText = "Complete.";
+                statusMsg.innerText = "Done.";
             } catch (e) {
                 statusMsg.innerText = "Error: " + e.message;
+                console.error(e);
             }
         }
 
