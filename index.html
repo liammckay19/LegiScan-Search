@@ -156,7 +156,7 @@
         }
 
         async function summarizeWithGemini(apiKey, text, title, currentStatus) {
-            const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
             const prompt = `Bill Title: ${title}\nCurrent Status: ${currentStatus}\n\nTask: Summarize the real-world impact of this bill in 1-10 sentences. Note explicitly if the bill has already passed or is still being debated. Text: ${text.substring(0, 40000)}`;
             
             try {
