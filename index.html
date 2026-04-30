@@ -164,10 +164,9 @@
         }
 
         async function summarizeWithGemini(apiKey, text, title, currentStatus) {
-            // UPDATED to Gemini 3 Flash for 2026 performance
-            const url = `https://generativelanguage.googleapis.com/v1/models/gemini-3-flash:generateContent?key=${apiKey}`;
+            // UPDATED: Changed 'v1' to 'v1beta' and model to 'gemini-3-flash-preview'
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
             
-            // We can now use a larger substring because Gemini 3 handles massive context better
             const prompt = `Bill Title: ${title}\nCurrent Status: ${currentStatus}\n\nTask: Summarize the real-world impact of this bill in 1-10 sentences. Note explicitly if the bill has already passed or is still being debated. Use a neutral, analytical tone.\n\nText: ${text.substring(0, 60000)}`;
             
             try {
@@ -183,8 +182,10 @@
                             { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
                         ],
                         generationConfig: {
-                            temperature: 0.1, // Lower temperature for more factual summaries
-                            maxOutputTokens: 800
+                            temperature: 0.1,
+                            maxOutputTokens: 800,
+                            // Optional: Gemini 3 models allow setting thinking levels
+                            // thinkingLevel: 'minimal' 
                         }
                     })
                 });
@@ -192,17 +193,17 @@
                 const data = await res.json();
                 
                 if (data.error) {
-                    console.error("Gemini 3 Error:", data.error.message);
-                    return `AI Error: ${data.error.message}`;
+                    console.error("Gemini 3 API Error:", data.error);
+                    return `AI Error: ${data.error.message} (Try checking if your API key has v1beta access enabled)`;
                 }
         
                 if (data.candidates && data.candidates[0].content) {
                     return data.candidates[0].content.parts[0].text;
                 }
                 
-                return "AI failed to generate a summary (possibly safety filtered).";
+                return "AI failed to generate a summary.";
             } catch (e) { 
-                return "Network error. Please check your API key and internet connection."; 
+                return "Network error. Check your connection."; 
             }
         }
     </script>
