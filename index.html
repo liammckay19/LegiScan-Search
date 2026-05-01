@@ -262,33 +262,51 @@
                 console.error(e);
             }
         }
-
+        async function callLegiScan(url, timeout = 30000) {
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+            
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+        
+            try {
+                const res = await fetch(proxyUrl, { signal: controller.signal });
+                clearTimeout(id);
+                
+                if (!res.ok) throw new Error(`Proxy error: ${res.status}`);
+                
+                const wrapper = await res.json();
+                if (!wrapper.contents) throw new Error("Proxy returned empty content.");
+                
+                return JSON.parse(wrapper.contents);
+            } catch (e) {
+                if (e.name === 'AbortError') throw new Error("Request timed out. The bill text might be too large.");
+                throw e;
+            }
+        }
+        
         async function getBillText(apiKey, docId) {
             try {
                 const legiScanUrl = `https://api.legiscan.com/?key=${apiKey}&op=getBillText&id=${docId}`;
-                // AllOrigins proxy URL structure
-                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(legiScanUrl)}`;
-        
-                const res = await fetch(proxyUrl);
-                const wrapper = await res.json();
                 
-                // AllOrigins wraps the LegiScan response in 'contents' as a string
-                const data = JSON.parse(wrapper.contents);
+                // Use our robust helper with a 45-second timeout for text
+                const data = await callLegiScan(legiScanUrl, 45000);
         
                 if (data.status !== "OK") return null;
         
                 const base64 = data.text.doc;
-                
+                if (!base64) return "No document content found.";
+        
                 if (data.text.mime === "text/html") {
-                    // Decode Base64 and strip HTML tags
+                    // HTML is usually faster and lighter than PDF
                     return atob(base64).replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
                 } else if (data.text.mime === "application/pdf") {
+                    // PDF extraction is the most likely culprit for timeouts
                     return await extractTextFromPDF(base64);
                 }
                 return null;
-            } catch (e) { 
+            } catch (e) {
                 console.error("Text Fetch Error:", e);
-                return null; 
+                return `Error: ${e.message}`;
             }
         }
         
