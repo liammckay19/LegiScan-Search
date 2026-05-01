@@ -263,21 +263,33 @@
             }
         }
 
-        async function getBillText(apiKey, billId) {
+        async function getBillText(apiKey, docId) {
             try {
-                const url = `${CORS_PROXY}${encodeURIComponent(`https://api.legiscan.com/?key=${apiKey}&op=getBillText&id=${billId}`)}`;
-                const res = await fetch(url);
-                const data = await res.json();
+                const legiScanUrl = `https://api.legiscan.com/?key=${apiKey}&op=getBillText&id=${docId}`;
+                // AllOrigins proxy URL structure
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(legiScanUrl)}`;
+        
+                const res = await fetch(proxyUrl);
+                const wrapper = await res.json();
+                
+                // AllOrigins wraps the LegiScan response in 'contents' as a string
+                const data = JSON.parse(wrapper.contents);
+        
                 if (data.status !== "OK") return null;
-
+        
                 const base64 = data.text.doc;
+                
                 if (data.text.mime === "text/html") {
+                    // Decode Base64 and strip HTML tags
                     return atob(base64).replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
                 } else if (data.text.mime === "application/pdf") {
                     return await extractTextFromPDF(base64);
                 }
                 return null;
-            } catch (e) { return null; }
+            } catch (e) { 
+                console.error("Text Fetch Error:", e);
+                return null; 
+            }
         }
         
         function pruneText(text) {
