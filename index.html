@@ -265,7 +265,7 @@
                     // ADDED: data-label attributes for mobile CSS hooks
                     tr.innerHTML = `
                         <td data-label="Bill Info">
-                            <a class="bill-link" href="${b.url}" target="_blank">${b.bill_number}</a><br>
+                            <a class="bill-link" href="${b.url}" target="_blank">${b.state} ${b.bill_number}</a><br>
                             <small>${b.title.substring(0, 80)}...</small>
                         </td>
                         <td data-label="Status (Votes)">
