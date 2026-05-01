@@ -219,7 +219,8 @@
                     if (b.texts && b.texts.length > 0) {
                         // Use doc_id for 1:1 text matching
                         const latestDocId = b.texts[0].doc_id; 
-                        billTextContent = await getBillText(legiscanKey, latestDocId); 
+                        billRawText = await getBillText(legiscanKey, latestDocId); 
+                        billTextContent = pruneText(billRawText);
                     }
         
                     if (billTextContent && geminiKey) {
@@ -252,6 +253,22 @@
                 }
                 return null;
             } catch (e) { return null; }
+        }
+        
+        function pruneText(text) {
+            if (!text) return "";
+            
+            // 1. Remove line numbers (e.g., "1 ", "2 ", "24 ")
+            let cleaned = text.replace(/^\s*\d+\s+/gm, '');
+            
+            // 2. Remove repetitive headers/footers often found in PDFs
+            cleaned = cleaned.replace(/Page \d+ of \d+/gi, '');
+            cleaned = cleaned.replace(/LEGISLATIVE COUNSEL’S DIGEST/gi, 'SUMMARY:');
+            
+            // 3. Limit the total length
+            // 15,000 characters is usually plenty for a 1-10 sentence summary.
+            // This is about 3,000 - 4,000 tokens.
+            return cleaned.substring(0, 15000); 
         }
 
         async function extractTextFromPDF(base64) {
