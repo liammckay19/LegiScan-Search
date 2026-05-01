@@ -49,4 +49,4 @@ Voter suppression can happen when the law is too complicated for the people to u
 ---
 
 ### Disclaimer
-*This tool uses AI to summarize text. While AI is highly capable, summaries should be used as a starting point for understanding. Users are encouraged to click the "View on LegiScan" button to read the full, official text of any bill before taking legislative action.*
+*This tool uses AI to summarize text. While AI is highly capable, summaries should be used as a starting point for understanding. Users are encouraged to click the bill name which links to read the full, official text of any bill before taking legislative action.*
