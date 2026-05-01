@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>LegiScan Search</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
@@ -19,9 +19,9 @@
         .input-row { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
         .input-group { flex: 1; min-width: 200px; }
         label { display: block; font-size: 0.85rem; font-weight: 600; color: #555; margin-bottom: 4px; }
-        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 16px; /* 16px prevents auto-zoom on iOS */ }
         
-        button { background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.2s; }
+        button { background: #007bff; color: white; border: none; padding: 14px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.2s; font-size: 1rem;}
         button:hover { background: #0056b3; }
         .secondary-btn { background: #6c757d; margin-top: 1rem; }
 
@@ -40,13 +40,48 @@
         ol { padding-left: 20px; }
         li { margin-bottom: 10px; }
         code { background: #f1f1f1; padding: 2px 5px; border-radius: 4px; font-family: monospace; }
+
+        /* =========================================
+           MOBILE OPTIMIZATION (Card Layout)
+           ========================================= */
+        @media (max-width: 768px) {
+            body { padding: 1rem; }
+            .input-row { flex-direction: column; }
+            .input-group { min-width: 100%; flex: 1 1 100% !important; }
+
+            /* Hide default table headers */
+            #resultsTable thead { display: none; }
+            #resultsTable { border: none; box-shadow: none; background: transparent; }
+            
+            #tableBody { display: flex; flex-direction: column; gap: 1.2rem; }
+            
+            /* Turn rows into cards */
+            #tableBody tr {
+                display: block; background: white; padding: 1rem;
+                border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border: 1px solid #eee;
+            }
+            
+            #tableBody td {
+                display: block; border: none; position: relative;
+                padding: 0.5rem 0; width: 100%; border-bottom: 1px solid #f1f1f1;
+            }
+            
+            #tableBody td:last-child { border-bottom: none; }
+            
+            /* Insert labels for mobile view using data-label attribute */
+            #tableBody td::before {
+                content: attr(data-label);
+                display: block; font-weight: bold; font-size: 0.75rem;
+                color: #888; text-transform: uppercase; margin-bottom: 4px;
+            }
+        }
     </style>
 </head>
 <body>
 
     <!-- Top Link -->
     <div class="top-nav" id="navContainer">
-        <a class="nav-link" onclick="showPage('guidePage')">What is the API keys?</a>
+        <a class="nav-link" onclick="showPage('guidePage')">What are the API keys?</a>
     </div>
 
     <!-- MAIN TRACKER PAGE -->
@@ -64,24 +99,24 @@
                 </div>
                 <div class="input-group">
                     <label>Gemini Model</label>
-                    <select id="modelSelect" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+                    <select id="modelSelect">
                         <option value="gemini-3-flash-preview">Loading models...</option>
                     </select>
                 </div>
                 <div class="input-group">
-                    <a href="https://legiscan.com/fulltext-search" target="_blank" id="externalSearchForm">
-                        <label>Keywords (how to search)</label>
+                    <a href="https://legiscan.com/fulltext-search" target="_blank" id="externalSearchForm" style="text-decoration: none;">
+                        <label style="color: #007bff; cursor: pointer; text-decoration: underline;">Keywords (how to search)</label>
                     </a>
                     <input type="text" name="q" id="searchQuery" 
                            value="state:CA AND status:passed AND (AB11 OR AB590 OR 'Social Housing' OR 'California Housing Authority' OR 'Social Connection' OR 'Loneliness' OR 'Community Center' OR 'Social Infrastructure' OR 'Ranked Choice' OR 'Proportional Representation' OR 'Independent Redistricting' OR (Public NEAR Medicine) OR 'State Bank' OR (Generic ADJ Drugs))">
                 </div>
-                <div class="input-group" style="flex: 0 0 100px;">
+                <div class="input-group">
                     <label>Max number of Bills (Default 5)</label>
                     <input type="number" id="resultLimit" value="5" min="1" max="50">
                 </div>
                 <details style="width: 100%; margin-bottom: 1rem; cursor: pointer;">
-                    <summary style="font-size: 0.85rem; font-weight: 600; color: #007bff;">Advanced AI Settings</summary>
-                    <div class="card" style="margin-top: 10px; background: #f8f9fa; border: 1px solid #ddd;">
+                    <summary style="font-size: 0.85rem; font-weight: 600; color: #007bff; padding: 10px 0;">Advanced AI Settings</summary>
+                    <div class="card" style="margin-top: 10px; background: #f8f9fa; border: 1px solid #ddd; padding: 1rem;">
                         <div class="input-row">
                             <div class="input-group">
                                 <label>Input Character Limit (Controls Tokens)</label>
@@ -90,7 +125,7 @@
                             </div>
                             <div class="input-group">
                                 <label>Use Raw Bill Text?</label>
-                                <select id="useRawText" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+                                <select id="useRawText">
                                     <option value="true" selected>True (Send full text)</option>
                                     <option value="false">False (Send title only)</option>
                                 </select>
@@ -100,13 +135,19 @@
                                 <input type="number" id="maxOutputTokens" value="1000" step="100" min="100">
                                 <small style="color: #666;">Limits how long the AI's summary can be.</small>
                             </div>
+                            <!-- NEW: PDF PAGE LIMITER -->
+                            <div class="input-group">
+                                <label>Max PDF Pages to Read</label>
+                                <input type="number" id="pdfPageLimit" value="5" min="1" max="100">
+                                <small style="color: #666;">Limits memory/CPU usage on mobile devices.</small>
+                            </div>
                         </div>
                     </div>
                 </details>
             </div>
             
             <button id="searchBtn" onclick="runPipeline()">Scan & Summarize Recent Bills</button>
-            <div id="statusMsg" style="margin-top: 10px; color: #666;"></div>
+            <div id="statusMsg" style="margin-top: 10px; color: #666; font-weight: 600;"></div>
         </div>
 
         <table id="resultsTable" style="display: none;">
@@ -147,7 +188,7 @@
                 <li>Sign in with your Google account.</li>
                 <li>Click on <strong>"Get API key"</strong> in the sidebar.</li>
                 <li>Click <strong>"Create API key in new project"</strong>.</li>
-                <li>Copy the key. <em>Note: In 2026, ensure you are using a key that supports <code>v1beta</code> models for Gemini 3.</em></li>
+                <li>Copy the key.</li>
             </ol>
 
             <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 5px solid #ffeeba; margin-top: 2rem;">
@@ -221,28 +262,28 @@
                     }).join(', ');
         
                     const tr = document.createElement('tr');
+                    // ADDED: data-label attributes for mobile CSS hooks
                     tr.innerHTML = `
-                        <td>
+                        <td data-label="Bill Info">
                             <a class="bill-link" href="${b.url}" target="_blank">${b.bill_number}</a><br>
                             <small>${b.title.substring(0, 80)}...</small>
                         </td>
-                        <td>
+                        <td data-label="Status (Votes)">
                             <span class="status-badge ${isPassed ? 'status-passed' : 'status-other'}">${isPassed ? 'PASSED' : 'PENDING'}</span>
                             <br><small>${voteText}</small>
                         </td>
-                        <td>${absentText}</td>
-                        <td style="max-width: 250px;">${sponsorsHtml}</td>
-                        <td id="summary-${billId}"><em>Summarizing...</em></td>
-                        <td>${b.status_date}</td>
+                        <td data-label="Absences">${absentText}</td>
+                        <td data-label="Sponsors" style="max-width: 250px;">${sponsorsHtml}</td>
+                        <td data-label="AI Impact Summary" id="summary-${billId}"><em>Summarizing...</em></td>
+                        <td data-label="Last Date">${b.status_date}</td>
                     `;
                     tableBody.appendChild(tr);
         
                     // --- RECENT DOCUMENT LOGIC ---
                     let billTextContent = null;
                     if (b.texts && b.texts.length > 0) {
-                        // Sort texts by date descending (newest first)
                         const sortedTexts = b.texts.sort((a, b) => new Date(b.date) - new Date(a.date));
-                        const latestDocId = sortedTexts[0].doc_id; // Grab the most recent one
+                        const latestDocId = sortedTexts[0].doc_id; 
                         
                         statusMsg.innerText = `Fetching text for bill ${i + 1} (Doc ID: ${latestDocId})...`;
                         billTextContent = await getBillText(legiscanKey, latestDocId); 
@@ -262,6 +303,7 @@
                 console.error(e);
             }
         }
+
         async function callLegiScan(url, timeout = 30000) {
             const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
             
@@ -288,7 +330,6 @@
             try {
                 const legiScanUrl = `https://api.legiscan.com/?key=${apiKey}&op=getBillText&id=${docId}`;
                 
-                // Use our robust helper with a 45-second timeout for text
                 const data = await callLegiScan(legiScanUrl, 45000);
         
                 if (data.status !== "OK") return null;
@@ -297,11 +338,11 @@
                 if (!base64) return "No document content found.";
         
                 if (data.text.mime === "text/html") {
-                    // HTML is usually faster and lighter than PDF
                     return atob(base64).replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
                 } else if (data.text.mime === "application/pdf") {
-                    // PDF extraction is the most likely culprit for timeouts
-                    return await extractTextFromPDF(base64);
+                    // Grab the user-defined limit from the UI
+                    const limit = parseInt(document.getElementById('pdfPageLimit').value) || 5;
+                    return await extractTextFromPDF(base64, limit);
                 }
                 return null;
             } catch (e) {
@@ -312,27 +353,22 @@
         
         function pruneText(text) {
             if (!text) return "";
-            
-            // 1. Remove line numbers (e.g., "1 ", "2 ", "24 ")
             let cleaned = text.replace(/^\s*\d+\s+/gm, '');
-            
-            // 2. Remove repetitive headers/footers often found in PDFs
             cleaned = cleaned.replace(/Page \d+ of \d+/gi, '');
             cleaned = cleaned.replace(/LEGISLATIVE COUNSEL’S DIGEST/gi, 'SUMMARY:');
-            
-            // 3. Limit the total length
-            // 15,000 characters is usually plenty for a 1-10 sentence summary.
-            // This is about 3,000 - 4,000 tokens.
             return cleaned.substring(0, 15000); 
         }
 
-        async function extractTextFromPDF(base64) {
+        // Updated function to accept page limit parameter
+        async function extractTextFromPDF(base64, pageLimit) {
             const binary = atob(base64);
             const bytes = new Uint8Array(binary.length);
             for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
             const pdf = await pdfjsLib.getDocument({data: bytes}).promise;
             let fullText = "";
-            for (let i = 1; i <= Math.min(pdf.numPages, 10); i++) {
+            
+            // Respect the user's page limit here
+            for (let i = 1; i <= Math.min(pdf.numPages, pageLimit); i++) {
                 const page = await pdf.getPage(i);
                 const content = await page.getTextContent();
                 fullText += content.items.map(item => item.str).join(" ") + "\n";
@@ -340,7 +376,6 @@
             return fullText;
         }
 
-        // 1. Add an event listener to the API key input to fetch models when the user finishes typing
         document.getElementById('geminiKey').addEventListener('blur', fetchAvailableModels);
         
         async function fetchAvailableModels() {
@@ -356,18 +391,16 @@
                 const data = await res.json();
         
                 if (data.models) {
-                    // Filter for models that support "generateContent" (ignores embedding/speech-only models)
                     const chatModels = data.models.filter(m => 
                         m.supportedGenerationMethods.includes('generateContent')
                     );
         
-                    modelSelect.innerHTML = ''; // Clear loading
+                    modelSelect.innerHTML = ''; 
                     chatModels.forEach(m => {
                         const opt = document.createElement('option');
-                        opt.value = m.name; // This is usually "models/gemini-3-flash"
+                        opt.value = m.name; 
                         opt.textContent = m.displayName;
                         
-                        // Set Gemini 3 Flash as default if it exists
                         if (m.name.includes('gemini-3-flash')) opt.selected = true;
                         
                         modelSelect.appendChild(opt);
@@ -378,19 +411,14 @@
             }
         }
         
-
-        
         async function summarizeWithGemini(apiKey, text, title, currentStatus) {
             const selectedModel = document.getElementById('modelSelect').value; 
             const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${apiKey}`;
             
-            // Get Advanced Settings from UI
             const useRawText = document.getElementById('useRawText').value === "true";
             const charLimit = parseInt(document.getElementById('tokenLimit').value) || 20000;
             const maxOutput = parseInt(document.getElementById('maxOutputTokens').value) || 1000;
         
-            // Compile the text based on user preference
-            // Truncating characters is the most direct way to control token usage.
             const billBody = useRawText ? `\n\nFull Text Snippet:\n${text.substring(0, charLimit)}` : "";
         
             const prompt = `Bill Title: ${title}
