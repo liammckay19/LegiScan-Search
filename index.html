@@ -87,11 +87,12 @@
         <table id="resultsTable" style="display: none;">
             <thead>
                 <tr>
-                    <th>Bill / Link</th>
-                    <th>Title</th>
-                    <th>Status</th>
-                    <th>Last Action</th>
+                    <th>Bill</th>
+                    <th>Status (Votes)</th>
+                    <th>Absences</th>
+                    <th>Sponsors</th>
                     <th>AI Impact Summary</th>
+                    <th>Last Status Date</th>
                 </tr>
             </thead>
             <tbody id="tableBody"></tbody>
@@ -158,55 +159,78 @@
             const tableBody = document.getElementById('tableBody');
             const statusMsg = document.getElementById('statusMsg');
             
+            if(!legiscanKey) { alert("Please enter LegiScan Key"); return; }
+
             tableBody.innerHTML = "";
             document.getElementById('resultsTable').style.display = "table";
             statusMsg.innerText = "Searching LegiScan...";
-        
+
             try {
-                const searchRes = await fetch(`${CORS_PROXY}${encodeURIComponent(`https://api.legiscan.com/?key=${legiscanKey}&op=getSearch&query=${query}`)}`);
+                // 1. Raw Search to get IDs
+                const searchRes = await fetch(`${CORS_PROXY}${encodeURIComponent(`https://api.legiscan.com/?key=${legiscanKey}&op=getSearchRaw&query=${query}`)}`);
                 const searchData = await searchRes.json();
                 
-                const rawResults = Object.values(searchData.searchresult);
-                // Apply the dynamic slice limit
-                const bills = rawResults.filter(b => b && b.bill_id).slice(0, limit);
-        
-                if (bills.length === 0) {
-                    statusMsg.innerText = "No bills found. Try a different query.";
+                // LegiScan search results are in searchresult.results
+                const rawList = searchData.searchresult.results || [];
+                const billsToProcess = rawList.slice(0, limit);
+
+                if (billsToProcess.length === 0) {
+                    statusMsg.innerText = "No bills found.";
                     return;
                 }
-        
-                for (let i = 0; i < bills.length; i++) {
-                    let bill = bills[i];
-                    statusMsg.innerText = `Processing bill ${i + 1} of ${bills.length}...`;
 
-                    const statusText = bill.last_action || "Pending";
-                    const statusClass = bill.status === 4 ? "status-passed" : "status-other";
-                    
+                for (let i = 0; i < billsToProcess.length; i++) {
+                    const billId = billsToProcess[i].bill_id;
+                    statusMsg.innerText = `Fetching detail for bill ${i + 1} of ${billsToProcess.length}...`;
+
+                    // 2. Get Detailed Bill Data
+                    const detailRes = await fetch(`${CORS_PROXY}${encodeURIComponent(`https://api.legiscan.com/?key=${legiscanKey}&op=getBill&id=${billId}`)}`);
+                    const detailData = await detailRes.json();
+                    const b = detailData.bill;
+
+                    // Parse Votes
+                    const latestVote = b.votes && b.votes.length > 0 ? b.votes[0] : null;
+                    const voteText = latestVote ? `${latestVote.yea} Y / ${latestVote.nay} N` : "No votes";
+                    const absentText = latestVote ? latestVote.absent : "0";
+                    const isPassed = b.status === 4;
+
+                    // Parse Sponsors with links
+                    const sponsorsHtml = b.sponsors.map(s => {
+                        const bpUrl = s.bio && s.bio.social && s.bio.social.ballotpedia;
+                        return bpUrl ? `<a href="${bpUrl}" class="sponsor-link" target="_blank">${s.name}</a>` : s.name;
+                    }).join(', ');
+
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
-                        <td><a class="bill-link" href="${bill.url}" target="_blank">${bill.state} ${bill.bill_number}</a></td>
-                        <td style="font-size: 0.85rem; max-width: 200px;">${bill.title}</td>
-                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
-                        <td style="white-space: nowrap;">${bill.last_action_date}</td>
-                        <td id="summary-${bill.bill_id}"><em>Extracting text...</em></td>
+                        <td>
+                            <a class="bill-link" href="${b.url}" target="_blank">${b.bill_number}</a><br>
+                            <small>${b.title.substring(0, 80)}...</small>
+                        </td>
+                        <td>
+                            <span class="status-badge ${isPassed ? 'status-passed' : 'status-other'}">${isPassed ? 'PASSED' : 'PENDING'}</span>
+                            <br><small>${voteText}</small>
+                        </td>
+                        <td>${absentText}</td>
+                        <td style="max-width: 250px;">${sponsorsHtml}</td>
+                        <td id="summary-${billId}"><em>Summarizing...</em></td>
+                        <td>${b.status_date}</td>
                     `;
                     tableBody.appendChild(tr);
-        
-                    let text = await getBillText(legiscanKey, bill.bill_id);
-                    if (!text) {
-                        document.getElementById(`summary-${bill.bill_id}`).innerText = "Text not found.";
-                        continue;
+
+                    // 3. AI Summary Pipeline
+                    let text = await getBillText(legiscanKey, billId);
+                    if (text && geminiKey) {
+                        await sleep(1000); // Rate limit protection
+                        let summary = await summarizeWithGemini(geminiKey, text, b.title, isPassed ? "Passed" : "Debating");
+                        document.getElementById(`summary-${billId}`).innerText = summary;
+                    } else {
+                        document.getElementById(`summary-${billId}`).innerText = "No text or AI key provided.";
                     }
-
-                    // Rate limiting: wait 1 second between AI calls to avoid 429 errors on free tier
-                    if (i > 0) await sleep(1000);
-
-                    let summary = await summarizeWithGemini(geminiKey, text, bill.title, statusText);
-                    document.getElementById(`summary-${bill.bill_id}`).innerText = summary;
                 }
-                statusMsg.innerText = "Done.";
+                statusMsg.innerText = "Scan complete.";
             } catch (e) {
                 statusMsg.innerText = "Error: " + e.message;
+                console.error(e);
             }
         }
 
