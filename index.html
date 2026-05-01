@@ -244,8 +244,7 @@
                     if (b.texts && b.texts.length > 0) {
                         // Use doc_id for 1:1 text matching
                         const latestDocId = b.texts[0].doc_id; 
-                        billRawText = await getBillText(legiscanKey, latestDocId); 
-                        billTextContent = pruneText(billRawText);
+                        billTextContent = await getBillText(legiscanKey, latestDocId); 
                     }
         
                     if (billTextContent && geminiKey) {
