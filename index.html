@@ -218,7 +218,10 @@
                     tableBody.appendChild(tr);
 
                     // 3. AI Summary Pipeline
-                    let text = await getBillText(legiscanKey, billId);
+                    if (b.texts && b.texts.length > 0) {
+                        const latestDocId = b.texts[0].doc_id; // The first item is usually the most recent
+                        let text = await getBillText(legiscanKey, latestDocId); 
+                    }
                     if (text && geminiKey) {
                         await sleep(1000); // Rate limit protection
                         let summary = await summarizeWithGemini(geminiKey, text, b.title, isPassed ? "Passed" : "Debating");
