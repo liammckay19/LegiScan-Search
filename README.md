@@ -1,4 +1,4 @@
-### Legislative Tracker: Legi-Scan Search
+### USA Legislative Tracker: Legi-Scan Search
 
 **Bridging the gap between complex legislation and voter understanding.**
 
