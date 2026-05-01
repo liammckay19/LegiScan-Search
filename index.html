@@ -79,7 +79,32 @@
                     <label>Max number of Bills (Default 5)</label>
                     <input type="number" id="resultLimit" value="5" min="1" max="50">
                 </div>
+                <details style="width: 100%; margin-bottom: 1rem; cursor: pointer;">
+                    <summary style="font-size: 0.85rem; font-weight: 600; color: #007bff;">Advanced AI Settings</summary>
+                    <div class="card" style="margin-top: 10px; background: #f8f9fa; border: 1px solid #ddd;">
+                        <div class="input-row">
+                            <div class="input-group">
+                                <label>Input Character Limit (Controls Tokens)</label>
+                                <input type="number" id="tokenLimit" value="20000" step="5000" min="1000">
+                                <small style="color: #666;">Limits how much of the bill text is sent to the AI.</small>
+                            </div>
+                            <div class="input-group">
+                                <label>Use Raw Bill Text?</label>
+                                <select id="useRawText" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+                                    <option value="true" selected>True (Send full text)</option>
+                                    <option value="false">False (Send title only)</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label>Max Response Tokens</label>
+                                <input type="number" id="maxOutputTokens" value="1000" step="100" min="100">
+                                <small style="color: #666;">Limits how long the AI's summary can be.</small>
+                            </div>
+                        </div>
+                    </div>
+                </details>
             </div>
+            
             <button id="searchBtn" onclick="runPipeline()">Scan & Summarize Recent Bills</button>
             <div id="statusMsg" style="margin-top: 10px; color: #666;"></div>
         </div>
@@ -327,10 +352,21 @@
         
         async function summarizeWithGemini(apiKey, text, title, currentStatus) {
             const selectedModel = document.getElementById('modelSelect').value; 
-            // The endpoint changes slightly because the model name from the API already includes "models/"
             const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${apiKey}`;
-                            
-            const prompt = `Bill Title: ${title}\nCurrent Status: ${currentStatus}\n\nTask: Summarize the real-world impact of this bill in 1-10 sentences. Note explicitly if the bill has already passed or is still being debated. Use a neutral, analytical tone.\n\nText: ${text.substring(0, 500000)}`;
+            
+            // Get Advanced Settings from UI
+            const useRawText = document.getElementById('useRawText').value === "true";
+            const charLimit = parseInt(document.getElementById('tokenLimit').value) || 20000;
+            const maxOutput = parseInt(document.getElementById('maxOutputTokens').value) || 1000;
+        
+            // Compile the text based on user preference
+            // Truncating characters is the most direct way to control token usage.
+            const billBody = useRawText ? `\n\nFull Text Snippet:\n${text.substring(0, charLimit)}` : "";
+        
+            const prompt = `Bill Title: ${title}
+        Current Status: ${currentStatus}
+        
+        Task: Summarize the real-world impact of this bill in 1-10 sentences. Note explicitly if the bill has already passed or is still being debated. Use a neutral, analytical tone.${billBody}`;
             
             try {
                 const res = await fetch(url, {
@@ -346,10 +382,7 @@
                         ],
                         generationConfig: {
                             temperature: 0.1,
-                            // INCREASE THIS VALUE
-                            // 2048 tokens is more than enough for 1-10 sentences
-                            maxOutputTokens: 4000, 
-                            // Optional: ensure the model doesn't get lazy
+                            maxOutputTokens: maxOutput, 
                             topP: 0.95,
                             topK: 40
                         }
@@ -360,7 +393,7 @@
                 
                 if (data.error) {
                     console.error("Gemini API Error:", data.error);
-                    return `AI Error: ${data.error.message} Error with selected model. Ensure your key has access to it.`;
+                    return `AI Error: ${data.error.message}`;
                 }
         
                 if (data.candidates && data.candidates[0].content) {
