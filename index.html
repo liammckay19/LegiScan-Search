@@ -191,7 +191,6 @@
             statusMsg.innerText = "Searching LegiScan...";
         
             try {
-                // 1. Raw Search to get IDs
                 const searchRes = await fetch(`${CORS_PROXY}${encodeURIComponent(`https://api.legiscan.com/?key=${legiscanKey}&op=getSearchRaw&query=${query}`)}`);
                 const searchData = await searchRes.json();
                 
@@ -207,7 +206,6 @@
                     const billId = billsToProcess[i].bill_id;
                     statusMsg.innerText = `Fetching detail for bill ${i + 1} of ${billsToProcess.length}...`;
         
-                    // 2. Get Detailed Bill Data
                     const detailRes = await fetch(`${CORS_PROXY}${encodeURIComponent(`https://api.legiscan.com/?key=${legiscanKey}&op=getBill&id=${billId}`)}`);
                     const detailData = await detailRes.json();
                     const b = detailData.bill;
@@ -239,16 +237,19 @@
                     `;
                     tableBody.appendChild(tr);
         
-                    // 3. AI Summary Pipeline - FIXED SCOPE AND DOC_ID
+                    // --- RECENT DOCUMENT LOGIC ---
                     let billTextContent = null;
                     if (b.texts && b.texts.length > 0) {
-                        // Use doc_id for 1:1 text matching
-                        const latestDocId = b.texts[0].doc_id; 
+                        // Sort texts by date descending (newest first)
+                        const sortedTexts = b.texts.sort((a, b) => new Date(b.date) - new Date(a.date));
+                        const latestDocId = sortedTexts[0].doc_id; // Grab the most recent one
+                        
+                        statusMsg.innerText = `Fetching text for bill ${i + 1} (Doc ID: ${latestDocId})...`;
                         billTextContent = await getBillText(legiscanKey, latestDocId); 
                     }
         
                     if (billTextContent && geminiKey) {
-                        await sleep(1000); // Rate limit protection
+                        await sleep(1000); 
                         let summary = await summarizeWithGemini(geminiKey, billTextContent, b.title, isPassed ? "Passed" : "Debating");
                         document.getElementById(`summary-${billId}`).innerText = summary;
                     } else {
